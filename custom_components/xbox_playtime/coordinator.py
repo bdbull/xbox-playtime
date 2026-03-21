@@ -77,7 +77,7 @@ class XboxPlayTimeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _fetch_presence(self, xuids: list[str]) -> dict[str, Any]:
         """Fetch presence data from OpenXBL for given XUIDs."""
         headers = {
-            "X-Authorization": self._api_key,
+            "x-authorization": self._api_key,
             "Accept": "application/json",
         }
 
@@ -90,7 +90,17 @@ class XboxPlayTimeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         headers=headers,
                     ) as resp:
                         if resp.status == 200:
-                            results[xuid] = await resp.json()
+                            data = await resp.json()
+                            _LOGGER.debug(
+                                "OpenXBL presence for %s: %s",
+                                xuid,
+                                str(data)[:500],
+                            )
+                            # API may return a list or a dict
+                            if isinstance(data, list) and len(data) > 0:
+                                data = data[0]
+                            if isinstance(data, dict):
+                                results[xuid] = data
                         elif resp.status == 429:
                             _LOGGER.warning("OpenXBL rate limit hit")
                             raise UpdateFailed("OpenXBL rate limit exceeded")
