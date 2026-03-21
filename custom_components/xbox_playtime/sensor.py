@@ -24,9 +24,10 @@ async def async_setup_entry(
     entities: list[SensorEntity] = []
     for kid in gamertags:
         xuid = kid["xuid"]
-        entities.append(XboxPlayTimeSensor(coordinator, xuid))
-        entities.append(XboxStatusSensor(coordinator, xuid))
-        entities.append(XboxCurrentGameSensor(coordinator, xuid))
+        gamertag = kid.get("display_name", kid.get("gamertag", xuid))
+        entities.append(XboxPlayTimeSensor(coordinator, xuid, gamertag))
+        entities.append(XboxStatusSensor(coordinator, xuid, gamertag))
+        entities.append(XboxCurrentGameSensor(coordinator, xuid, gamertag))
 
     async_add_entities(entities)
 
@@ -38,19 +39,12 @@ class XboxPlayTimeSensor(CoordinatorEntity[XboxPlayTimeCoordinator], SensorEntit
     _attr_native_unit_of_measurement = "min"
     _attr_icon = "mdi:controller"
 
-    def __init__(self, coordinator: XboxPlayTimeCoordinator, xuid: str) -> None:
+    def __init__(self, coordinator: XboxPlayTimeCoordinator, xuid: str, gamertag: str) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
         self._xuid = xuid
-        gamertag = self._get_gamertag()
         self._attr_unique_id = f"{DOMAIN}_{xuid}_play_time"
         self._attr_name = f"{gamertag} Play Time Today"
-
-    def _get_gamertag(self) -> str:
-        """Get the display name for this XUID."""
-        if self.coordinator.data and self._xuid in self.coordinator.data:
-            return self.coordinator.data[self._xuid].get("display_name", self._xuid)
-        return self._xuid
 
     @property
     def native_value(self) -> int | None:
@@ -75,19 +69,12 @@ class XboxStatusSensor(CoordinatorEntity[XboxPlayTimeCoordinator], SensorEntity)
 
     _attr_icon = "mdi:xbox"
 
-    def __init__(self, coordinator: XboxPlayTimeCoordinator, xuid: str) -> None:
+    def __init__(self, coordinator: XboxPlayTimeCoordinator, xuid: str, gamertag: str) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
         self._xuid = xuid
-        gamertag = self._get_gamertag()
         self._attr_unique_id = f"{DOMAIN}_{xuid}_status"
         self._attr_name = f"{gamertag} Xbox Status"
-
-    def _get_gamertag(self) -> str:
-        """Get the display name for this XUID."""
-        if self.coordinator.data and self._xuid in self.coordinator.data:
-            return self.coordinator.data[self._xuid].get("display_name", self._xuid)
-        return self._xuid
 
     @property
     def native_value(self) -> str:
@@ -102,19 +89,12 @@ class XboxCurrentGameSensor(CoordinatorEntity[XboxPlayTimeCoordinator], SensorEn
 
     _attr_icon = "mdi:gamepad-variant"
 
-    def __init__(self, coordinator: XboxPlayTimeCoordinator, xuid: str) -> None:
+    def __init__(self, coordinator: XboxPlayTimeCoordinator, xuid: str, gamertag: str) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
         self._xuid = xuid
-        gamertag = self._get_gamertag()
         self._attr_unique_id = f"{DOMAIN}_{xuid}_current_game"
         self._attr_name = f"{gamertag} Current Game"
-
-    def _get_gamertag(self) -> str:
-        """Get the display name for this XUID."""
-        if self.coordinator.data and self._xuid in self.coordinator.data:
-            return self.coordinator.data[self._xuid].get("display_name", self._xuid)
-        return self._xuid
 
     @property
     def native_value(self) -> str | None:
