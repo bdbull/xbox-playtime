@@ -46,12 +46,15 @@ async def resolve_gamertag(api_key: str, gamertag: str) -> dict | None:
             if resp.status != 200:
                 return None
             data = await resp.json()
-            if data and "people" in data and len(data["people"]) > 0:
-                person = data["people"][0]
+            _LOGGER.debug("OpenXBL search response: %s", str(data)[:500])
+            people = data.get("people", []) if isinstance(data, dict) else data if isinstance(data, list) else []
+            if people and len(people) > 0:
+                person = people[0]
+                gt = person.get("gamertag") or gamertag
                 return {
                     "xuid": person.get("xuid"),
-                    "gamertag": person.get("gamertag"),
-                    "display_name": person.get("displayName", person.get("gamertag")),
+                    "gamertag": gt,
+                    "display_name": person.get("displayName") or gt,
                 }
             return None
 

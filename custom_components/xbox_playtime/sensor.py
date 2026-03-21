@@ -24,7 +24,7 @@ async def async_setup_entry(
     entities: list[SensorEntity] = []
     for kid in gamertags:
         xuid = kid["xuid"]
-        gamertag = kid.get("display_name", kid.get("gamertag", xuid))
+        gamertag = kid.get("display_name") or kid.get("gamertag") or xuid
         entities.append(XboxPlayTimeSensor(coordinator, xuid, gamertag))
         entities.append(XboxStatusSensor(coordinator, xuid, gamertag))
         entities.append(XboxCurrentGameSensor(coordinator, xuid, gamertag))
