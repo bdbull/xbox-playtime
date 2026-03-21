@@ -10,12 +10,16 @@ import aiohttp
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
 from .const import CONF_API_KEY, CONF_GAMERTAGS, DOMAIN, OPENXBL_BASE_URL, SCAN_INTERVAL_SECONDS
 
 _LOGGER = logging.getLogger(__name__)
+
+STORAGE_VERSION = 1
+STORAGE_KEY = f"{DOMAIN}.playtime"
 
 
 class XboxPlayTimeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -31,28 +35,61 @@ class XboxPlayTimeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self._api_key = entry.data[CONF_API_KEY]
         self._gamertags: list[dict] = entry.data.get(CONF_GAMERTAGS, [])
+        self._store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}_{entry.entry_id}")
 
         # Track state per XUID
-        # {xuid: {"online": bool, "session_start": datetime|None,
-        #         "play_time_today": timedelta, "last_reset": date,
-        #         "current_game": str|None, "gamertag": str}}
         self._state: dict[str, dict[str, Any]] = {}
-        self._init_state()
+        self._storage_loaded = False
 
-    def _init_state(self) -> None:
-        """Initialize tracking state for each kid."""
+    async def _async_load_storage(self) -> None:
+        """Load persisted play time data from storage."""
         now = dt_util.now()
+        stored = await self._store.async_load()
+
         for kid in self._gamertags:
             xuid = kid["xuid"]
+            gt = kid.get("gamertag") or xuid
             self._state[xuid] = {
                 "online": False,
                 "session_start": None,
                 "play_time_today": timedelta(),
                 "last_reset": now.date(),
                 "current_game": None,
-                "gamertag": kid["gamertag"],
-                "display_name": kid.get("display_name", kid["gamertag"]),
+                "gamertag": gt,
+                "display_name": kid.get("display_name") or gt,
             }
+
+        if stored and isinstance(stored, dict):
+            for xuid, data in stored.items():
+                if xuid not in self._state:
+                    continue
+                stored_date = data.get("last_reset")
+                if stored_date == now.date().isoformat():
+                    self._state[xuid]["play_time_today"] = timedelta(
+                        seconds=data.get("play_time_seconds", 0)
+                    )
+                    self._state[xuid]["last_reset"] = now.date()
+                    _LOGGER.debug(
+                        "Restored %s play time: %ss",
+                        self._state[xuid]["gamertag"],
+                        data.get("play_time_seconds", 0),
+                    )
+
+        self._storage_loaded = True
+
+    async def _async_save_storage(self) -> None:
+        """Persist play time data to storage."""
+        data = {}
+        for xuid, state in self._state.items():
+            play_time = state["play_time_today"]
+            # Include current session time in the persisted value
+            if state["online"] and state["session_start"]:
+                play_time += dt_util.now() - state["session_start"]
+            data[xuid] = {
+                "play_time_seconds": int(play_time.total_seconds()),
+                "last_reset": state["last_reset"].isoformat(),
+            }
+        await self._store.async_save(data)
 
     def _reset_daily_if_needed(self, xuid: str, now: datetime) -> None:
         """Reset daily play time at midnight."""
@@ -132,6 +169,9 @@ class XboxPlayTimeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch presence and update play time tracking."""
+        if not self._storage_loaded:
+            await self._async_load_storage()
+
         now = dt_util.now()
         xuids = [kid["xuid"] for kid in self._gamertags]
 
@@ -174,6 +214,9 @@ class XboxPlayTimeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             state["online"] = is_online
             state["current_game"] = current_game
+
+        # Persist state after every update
+        await self._async_save_storage()
 
         # Build output data for sensors
         output = {}
