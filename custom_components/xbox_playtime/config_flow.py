@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import logging
+
 import aiohttp
 import voluptuous as vol
 
@@ -13,15 +15,25 @@ from homeassistant.data_entry_flow import FlowResult
 
 from .const import CONF_API_KEY, CONF_GAMERTAGS, DOMAIN, OPENXBL_BASE_URL
 
+_LOGGER = logging.getLogger(__name__)
+
 
 async def validate_api_key(api_key: str) -> bool:
     """Validate the OpenXBL API key by making a test request."""
-    async with aiohttp.ClientSession() as session:
-        headers = {"X-Authorization": api_key, "Accept": "application/json"}
-        async with session.get(
-            f"{OPENXBL_BASE_URL}/account", headers=headers
-        ) as resp:
-            return resp.status == 200
+    try:
+        async with aiohttp.ClientSession() as session:
+            headers = {"x-authorization": api_key, "Accept": "application/json"}
+            async with session.get(
+                f"{OPENXBL_BASE_URL}/account", headers=headers
+            ) as resp:
+                body = await resp.text()
+                _LOGGER.debug(
+                    "OpenXBL validation: status=%s body=%s", resp.status, body[:500]
+                )
+                return resp.status == 200
+    except Exception as err:
+        _LOGGER.error("OpenXBL validation failed: %s", err)
+        return False
 
 
 async def resolve_gamertag(api_key: str, gamertag: str) -> dict | None:
