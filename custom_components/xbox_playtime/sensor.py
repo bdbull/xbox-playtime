@@ -67,8 +67,6 @@ class XboxPlayTimeSensor(CoordinatorEntity[XboxPlayTimeCoordinator], SensorEntit
 class XboxStatusSensor(CoordinatorEntity[XboxPlayTimeCoordinator], SensorEntity):
     """Sensor showing online/offline status."""
 
-    _attr_icon = "mdi:xbox"
-
     def __init__(self, coordinator: XboxPlayTimeCoordinator, xuid: str, gamertag: str) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
@@ -82,6 +80,14 @@ class XboxStatusSensor(CoordinatorEntity[XboxPlayTimeCoordinator], SensorEntity)
         if not self.coordinator.data or self._xuid not in self.coordinator.data:
             return "Unknown"
         return "Online" if self.coordinator.data[self._xuid]["online"] else "Offline"
+
+    @property
+    def icon(self) -> str:
+        """Return icon based on online status."""
+        if self.coordinator.data and self._xuid in self.coordinator.data:
+            if self.coordinator.data[self._xuid]["online"]:
+                return "mdi:xbox-controller"
+        return "mdi:xbox-controller-off"
 
 
 class XboxCurrentGameSensor(CoordinatorEntity[XboxPlayTimeCoordinator], SensorEntity):
