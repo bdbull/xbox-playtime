@@ -118,35 +118,42 @@ class XboxPlayTimeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "Accept": "application/json",
         }
 
+        base_urls = [
+            "https://xbl.io/api/v2",
+            "https://api.xbl.io/v2",
+        ]
+
         results = {}
         async with aiohttp.ClientSession() as session:
             for xuid in xuids:
-                try:
-                    async with session.get(
-                        f"{OPENXBL_BASE_URL}/{xuid}/presence",
-                        headers=headers,
-                    ) as resp:
-                        if resp.status == 200:
-                            data = await resp.json()
-                            _LOGGER.debug(
-                                "OpenXBL presence for %s: %s",
-                                xuid,
-                                str(data)[:500],
-                            )
-                            # API may return a list or a dict
-                            if isinstance(data, list) and len(data) > 0:
-                                data = data[0]
-                            if isinstance(data, dict):
-                                results[xuid] = data
-                        elif resp.status == 429:
-                            _LOGGER.warning("OpenXBL rate limit hit")
-                            raise UpdateFailed("OpenXBL rate limit exceeded")
-                        else:
-                            _LOGGER.warning(
-                                "OpenXBL returned %s for XUID %s", resp.status, xuid
-                            )
-                except aiohttp.ClientError as err:
-                    raise UpdateFailed(f"Error communicating with OpenXBL: {err}") from err
+                for base_url in base_urls:
+                    try:
+                        url = f"{base_url}/{xuid}/presence"
+                        async with session.get(url, headers=headers) as resp:
+                            if resp.status == 200:
+                                data = await resp.json()
+                                _LOGGER.debug(
+                                    "OpenXBL presence for %s via %s: %s",
+                                    xuid, base_url, str(data)[:500],
+                                )
+                                if isinstance(data, list) and len(data) > 0:
+                                    data = data[0]
+                                if isinstance(data, dict):
+                                    results[xuid] = data
+                                break
+                            elif resp.status == 429:
+                                _LOGGER.warning("OpenXBL rate limit hit")
+                                raise UpdateFailed("OpenXBL rate limit exceeded")
+                            else:
+                                _LOGGER.debug(
+                                    "OpenXBL %s returned %s for XUID %s",
+                                    base_url, resp.status, xuid,
+                                )
+                    except aiohttp.ClientError as err:
+                        _LOGGER.debug("OpenXBL %s failed: %s", base_url, err)
+                        continue
+                else:
+                    _LOGGER.warning("All OpenXBL endpoints failed for XUID %s", xuid)
 
         return results
 

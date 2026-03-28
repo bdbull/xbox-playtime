@@ -21,43 +21,89 @@ _LOGGER = logging.getLogger(__name__)
 
 async def validate_api_key(api_key: str) -> bool:
     """Validate the OpenXBL API key by making a test request."""
-    try:
-        async with aiohttp.ClientSession() as session:
-            headers = {"x-authorization": api_key, "Accept": "application/json"}
-            async with session.get(
-                f"{OPENXBL_BASE_URL}/account", headers=headers
-            ) as resp:
-                body = await resp.text()
-                _LOGGER.debug(
-                    "OpenXBL validation: status=%s body=%s", resp.status, body[:500]
-                )
-                return resp.status == 200
-    except Exception as err:
-        _LOGGER.error("OpenXBL validation failed: %s", err)
-        return False
+    headers = {"x-authorization": api_key, "Accept": "application/json"}
+    urls = [
+        "https://xbl.io/api/v2/account",
+        "https://api.xbl.io/v2/account",
+    ]
+    async with aiohttp.ClientSession() as session:
+        for url in urls:
+            try:
+                async with session.get(url, headers=headers) as resp:
+                    body = await resp.text()
+                    _LOGGER.debug(
+                        "OpenXBL validation %s: status=%s body=%s",
+                        url, resp.status, body[:500],
+                    )
+                    if resp.status == 200:
+                        return True
+            except Exception as err:
+                _LOGGER.debug("OpenXBL validation %s failed: %s", url, err)
+                continue
+    return False
 
 
 async def resolve_gamertag(api_key: str, gamertag: str) -> dict | None:
-    """Resolve a gamertag to XUID via OpenXBL."""
+    """Resolve a gamertag to XUID via OpenXBL. Tries multiple endpoints."""
     encoded_gt = quote(gamertag, safe="")
+    headers = {"x-authorization": api_key, "Accept": "application/json"}
+
+    # OpenXBL docs are inconsistent - try all known endpoints
+    urls = [
+        f"https://xbl.io/api/v2/search/{encoded_gt}",
+        f"https://xbl.io/api/v2/player/gamertag/{encoded_gt}",
+        f"https://api.xbl.io/v2/search/{encoded_gt}",
+        f"https://api.xbl.io/v2/player/gamertag/{encoded_gt}",
+    ]
+
     async with aiohttp.ClientSession() as session:
-        headers = {"x-authorization": api_key, "Accept": "application/json"}
-        url = f"{OPENXBL_BASE_URL}/player/gamertag/{encoded_gt}"
-        _LOGGER.debug("OpenXBL lookup URL: %s", url)
-        async with session.get(url, headers=headers) as resp:
-            if resp.status != 200:
-                _LOGGER.debug("OpenXBL lookup failed: status=%s", resp.status)
-                return None
-            data = await resp.json()
-            _LOGGER.debug("OpenXBL lookup response: %s", str(data)[:500])
-            if isinstance(data, dict):
-                gt = data.get("gamertag") or gamertag
-                return {
-                    "xuid": data.get("xuid"),
-                    "gamertag": gt,
-                    "display_name": data.get("displayName") or gt,
-                }
-            return None
+        for url in urls:
+            try:
+                _LOGGER.debug("OpenXBL trying: %s", url)
+                async with session.get(url, headers=headers) as resp:
+                    body = await resp.text()
+                    _LOGGER.debug(
+                        "OpenXBL %s: status=%s body=%s", url, resp.status, body[:500]
+                    )
+                    if resp.status != 200:
+                        continue
+                    data = await resp.json(content_type=None)
+
+                    # Handle search endpoint (returns {people: [...]})
+                    if isinstance(data, dict) and "people" in data:
+                        people = data["people"]
+                        if people and len(people) > 0:
+                            person = people[0]
+                            gt = person.get("gamertag") or gamertag
+                            return {
+                                "xuid": person.get("xuid"),
+                                "gamertag": gt,
+                                "display_name": person.get("displayName") or gt,
+                            }
+
+                    # Handle direct profile endpoint (returns flat dict)
+                    if isinstance(data, dict) and "xuid" in data:
+                        gt = data.get("gamertag") or gamertag
+                        return {
+                            "xuid": data.get("xuid"),
+                            "gamertag": gt,
+                            "display_name": data.get("displayName") or gt,
+                        }
+
+                    # Handle list response
+                    if isinstance(data, list) and len(data) > 0:
+                        person = data[0]
+                        gt = person.get("gamertag") or gamertag
+                        return {
+                            "xuid": person.get("xuid"),
+                            "gamertag": gt,
+                            "display_name": person.get("displayName") or gt,
+                        }
+            except Exception as err:
+                _LOGGER.debug("OpenXBL %s failed: %s", url, err)
+                continue
+
+    return None
 
 
 class XboxPlayTimeConfigFlow(ConfigFlow, domain=DOMAIN):
