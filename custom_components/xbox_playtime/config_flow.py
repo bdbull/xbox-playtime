@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import logging
+from urllib.parse import quote
 
 import aiohttp
 import voluptuous as vol
@@ -38,23 +39,23 @@ async def validate_api_key(api_key: str) -> bool:
 
 async def resolve_gamertag(api_key: str, gamertag: str) -> dict | None:
     """Resolve a gamertag to XUID via OpenXBL."""
+    encoded_gt = quote(gamertag, safe="")
     async with aiohttp.ClientSession() as session:
-        headers = {"X-Authorization": api_key, "Accept": "application/json"}
-        async with session.get(
-            f"{OPENXBL_BASE_URL}/search/{gamertag}", headers=headers
-        ) as resp:
+        headers = {"x-authorization": api_key, "Accept": "application/json"}
+        url = f"{OPENXBL_BASE_URL}/player/gamertag/{encoded_gt}"
+        _LOGGER.debug("OpenXBL lookup URL: %s", url)
+        async with session.get(url, headers=headers) as resp:
             if resp.status != 200:
+                _LOGGER.debug("OpenXBL lookup failed: status=%s", resp.status)
                 return None
             data = await resp.json()
-            _LOGGER.debug("OpenXBL search response: %s", str(data)[:500])
-            people = data.get("people", []) if isinstance(data, dict) else data if isinstance(data, list) else []
-            if people and len(people) > 0:
-                person = people[0]
-                gt = person.get("gamertag") or gamertag
+            _LOGGER.debug("OpenXBL lookup response: %s", str(data)[:500])
+            if isinstance(data, dict):
+                gt = data.get("gamertag") or gamertag
                 return {
-                    "xuid": person.get("xuid"),
+                    "xuid": data.get("xuid"),
                     "gamertag": gt,
-                    "display_name": person.get("displayName") or gt,
+                    "display_name": data.get("displayName") or gt,
                 }
             return None
 
