@@ -69,6 +69,10 @@ async def resolve_gamertag(api_key: str, gamertag: str) -> dict | None:
                         continue
                     data = await resp.json(content_type=None)
 
+                    # Unwrap content envelope if present
+                    if isinstance(data, dict) and "content" in data:
+                        data = data["content"]
+
                     # Handle search endpoint (returns {people: [...]})
                     if isinstance(data, dict) and "people" in data:
                         people = data["people"]
