@@ -5,6 +5,6 @@ DOMAIN = "xbox_playtime"
 CONF_API_KEY = "api_key"
 CONF_GAMERTAGS = "gamertags"
 
-OPENXBL_BASE_URL = "https://xbl.io/api/v2"
+OPENXBL_BASE_URL = "https://api.xbl.io/v2"
 
 SCAN_INTERVAL_SECONDS = 60
