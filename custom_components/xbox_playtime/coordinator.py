@@ -145,12 +145,12 @@ class XboxPlayTimeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                                 _LOGGER.warning("OpenXBL rate limit hit")
                                 raise UpdateFailed("OpenXBL rate limit exceeded")
                             else:
-                                _LOGGER.debug(
+                                _LOGGER.warning(
                                     "OpenXBL %s returned %s for XUID %s",
                                     base_url, resp.status, xuid,
                                 )
                     except aiohttp.ClientError as err:
-                        _LOGGER.debug("OpenXBL %s failed: %s", base_url, err)
+                        _LOGGER.error("OpenXBL %s failed: %s", base_url, err)
                         continue
                 else:
                     _LOGGER.warning("All OpenXBL endpoints failed for XUID %s", xuid)

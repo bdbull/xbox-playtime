@@ -31,15 +31,16 @@ async def validate_api_key(api_key: str) -> bool:
             try:
                 async with session.get(url, headers=headers) as resp:
                     body = await resp.text()
-                    _LOGGER.debug(
-                        "OpenXBL validation %s: status=%s body=%s",
-                        url, resp.status, body[:500],
-                    )
                     if resp.status == 200:
                         return True
+                    _LOGGER.warning(
+                        "OpenXBL API key validation failed at %s: status=%s body=%s",
+                        url, resp.status, body[:500],
+                    )
             except Exception as err:
-                _LOGGER.debug("OpenXBL validation %s failed: %s", url, err)
+                _LOGGER.error("OpenXBL validation request to %s failed: %s", url, err)
                 continue
+    _LOGGER.error("All OpenXBL validation endpoints failed. Check your API key.")
     return False
 
 
@@ -62,10 +63,11 @@ async def resolve_gamertag(api_key: str, gamertag: str) -> dict | None:
                 _LOGGER.debug("OpenXBL trying: %s", url)
                 async with session.get(url, headers=headers) as resp:
                     body = await resp.text()
-                    _LOGGER.debug(
-                        "OpenXBL %s: status=%s body=%s", url, resp.status, body[:500]
-                    )
                     if resp.status != 200:
+                        _LOGGER.warning(
+                            "OpenXBL %s returned status %s: %s",
+                            url, resp.status, body[:500],
+                        )
                         continue
                     data = await resp.json(content_type=None)
 
@@ -103,10 +105,19 @@ async def resolve_gamertag(api_key: str, gamertag: str) -> dict | None:
                             "gamertag": gt,
                             "display_name": person.get("displayName") or gt,
                         }
+
+                    # Got 200 but couldn't parse - log the structure
+                    _LOGGER.error(
+                        "OpenXBL returned 200 but response structure not recognized: %s",
+                        str(data)[:500],
+                    )
             except Exception as err:
-                _LOGGER.debug("OpenXBL %s failed: %s", url, err)
+                _LOGGER.error("OpenXBL %s failed: %s", url, err)
                 continue
 
+    _LOGGER.error(
+        "Could not resolve gamertag '%s' from any OpenXBL endpoint", gamertag
+    )
     return None
 
 
