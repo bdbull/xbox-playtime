@@ -138,6 +138,8 @@ class XboxPlayTimeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                                 )
                                 if isinstance(data, list) and len(data) > 0:
                                     data = data[0]
+                                if isinstance(data, dict) and "content" in data:
+                                    data = data["content"]
                                 if isinstance(data, dict):
                                     results[xuid] = data
                                 break
